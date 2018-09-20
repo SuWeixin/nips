@@ -92,7 +92,10 @@ class Vector{
 template <typename T>
 void loadFvecs(Matrix<T>* matrix, const string& path_name);
 
-uint64_t get_hash(Eigen::MatrixXd & mat, Eigen::VectorXd & vec, int k);
+uint64_t getHash(Eigen::MatrixXd & mat, Eigen::VectorXd & vec, int k);
+
+void getQueryOrder(std::vector<uint64_t>&, uint64_t, 
+            std::map<uint64_t, std::vector<int> >&, int);
 
 int l_hash_value, k;
 
@@ -135,12 +138,12 @@ int main(int argc, char** argv) {
             tmp_hash <<= 1;
             tmp_hash |= result(j, 0) > 0? 1: 0;
         }*/
-        uint64_t tmp_hash = get_hash(a, v, k);
+        uint64_t tmp_hash = getHash(a, v, k);
         it = hash_table.find(tmp_hash);
         if (it == hash_table.end()) {
-            std::vector<int> contain;
-            contain.push_back(i);
-            hash_table.insert(std::pair<uint64_t, std::vector<int> >(tmp_hash, contain));
+            hash_table.insert(hash_table.begin(), std::pair<uint64_t, std::vector<int> >
+                    (tmp_hash, std::vector<int>()));
+            (hash_table.begin() -> second).push_back(i);
         } else {
             (it->second).push_back(i);
         }
@@ -157,8 +160,15 @@ int main(int argc, char** argv) {
         for (int j = 0; j < d; ++j) {
             v(j) = base_value.getIndex(d * i + j);
         }
-        query_hash = get_hash(a, v, k);
+        query_hash = getHash(a, v, k);
         std::vector<uint64_t> query_order;
+
+        int t = k * 1000;
+
+        getQueryOrder(query_order, query_hash, hash_table, t);
+
+        
+
     }
     
 
@@ -194,7 +204,7 @@ void loadFvecs(Matrix<T>* matrix, const string& path_name) {
     fin.close();
 }
 
-uint64_t get_hash(Eigen::MatrixXd & mat, Eigen::VectorXd & vec, int k) {
+uint64_t getHash(Eigen::MatrixXd & mat, Eigen::VectorXd & vec, int k) {
     Eigen::MatrixXd result(k, 1);
     result = mat.transpose()*vec;
     uint64_t tmp_hash = result(0, 0) > 0? 1: 0;
@@ -203,4 +213,43 @@ uint64_t get_hash(Eigen::MatrixXd & mat, Eigen::VectorXd & vec, int k) {
         tmp_hash |= result(j, 0) > 0? 1: 0;
     }
     return tmp_hash;
+}
+
+void getQueryOrder(std::vector<uint64_t>& result, uint64_t query_hash, 
+    std::map<uint64_t, std::vector<int> >& hash_table, int t) {
+    
+    int pro_num = 0;
+    uint64_t xor = 0;
+    
+    std::map<int, std::vector<uint64_t> > query_order;
+    std::map<uint64_t, std::vector<int> >::iterator it;
+    std::map<int, std::vector<uint64_t> >::iterator qit;
+
+    for (it = hash_table.begin(); it != hash_table.end(); ++it) {
+        int dis = 0;
+        xor = (it -> first) ^ query_hash;
+        while (xor) {
+            ++dis;
+            xor &= (xor - 1);
+        }
+        qit = query_order.find(dis);
+        if (qit != query_order.end()) {
+            (qit -> second).push_back(it -> first);
+        } else {
+            query_order.insert(query_order.begin(), std::pair<int, std::vector<uint64_t> >
+                        (dis, std::vector<uint64_t>()));
+            (query_order.begin() -> second).push_back(it -> first);
+        }
+    }
+
+    int cur_dis = 0;
+    while (pro_num < t) {
+        qit = query_order.find(dis);
+        if (qit == query_order.end()) continue;
+        std::vector<uint64_t>::iterator it1;
+        for (it1 = (qit -> second).begin(); it1 != (qit -> second).end(); ++it1) {
+            result.push_back(*it);
+            cur_dis += hash_table[(*it)].size();
+        }
+    }
 }
